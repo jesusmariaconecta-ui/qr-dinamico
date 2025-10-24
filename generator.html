@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QR Studio — Estilizado (logo grande + esquinas redondeadas)</title>
+  <title>QR Studio — Estilizado (SVG + logo grande + esquinas redondeadas)</title>
 
   <!-- Librería estable que expone window.QRCodeStyling -->
   <script src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
@@ -24,7 +24,7 @@
     .small{color:#6b7280;font-size:12px}
     .slider{display:flex;gap:8px;align-items:center}
     .slider input{flex:1}
-    #qr canvas{background:#fff;border-radius:24px}
+    #qr svg{background:#fff;border-radius:24px}
   </style>
 </head>
 <body>
@@ -33,7 +33,7 @@
       <h1>QR Studio — Estilizado</h1>
       <p class="small">
         Este generador crea QRs que apuntan a <code>redirect.html?k=…</code> para que sean <strong>dinámicos</strong>.
-        Cambias los destinos en <code>target.json</code>. Usa el logo desde este mismo dominio (Pages) para evitar CORS.
+        Cambias los destinos en <code>target.json</code>. El QR se renderiza como <strong>SVG</strong> y el logo es <strong>SVG</strong> (nítido a cualquier tamaño).
       </p>
 
       <div class="row">
@@ -65,8 +65,8 @@
 
       <div class="row">
         <div>
-          <label>Logo (URL PNG/SVG) — centrado</label>
-          <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/1024-jmc.png" />
+          <label>Logo (URL SVG) — centrado</label>
+          <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/jmcsvg.svg" />
           <div class="slider">
             <label style="min-width:110px">Logo %</label>
             <input id="logoPct" type="range" min="10" max="40" step="1" value="28" />
@@ -77,22 +77,17 @@
           <label>Tamaño QR (px)</label>
           <input id="size" type="number" value="720" min="256" step="16" />
           <div class="slider" style="margin-top:10px">
-            <label style="min-width:110px">Redondeo módulos</label>
-            <input id="dotRound" type="range" min="0" max="1" step="0.05" value="0.85" />
-            <span id="dotRoundVal">0.85</span>
+            <label style="min-width:110px">Esquinas</label>
+            <select id="cornerStyle">
+              <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
+              <option value="rounded">Redondeadas</option>
+              <option value="square">Cuadradas</option>
+            </select>
           </div>
         </div>
       </div>
 
       <div class="row">
-        <div>
-          <label>Esquinas (finder corners)</label>
-          <select id="cornerStyle">
-            <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
-            <option value="rounded">Redondeadas</option>
-            <option value="square">Cuadradas</option>
-          </select>
-        </div>
         <div>
           <label>Error correction</label>
           <select id="ecLevel">
@@ -102,11 +97,15 @@
             <option value="L">L</option>
           </select>
         </div>
+        <div>
+          <!-- vacío para balance visual -->
+        </div>
       </div>
 
       <div class="actions">
         <button id="gen">Generar QR</button>
-        <button id="dl" disabled>Descargar PNG</button>
+        <button id="dlSvg" disabled>Descargar SVG</button>
+        <button id="dlPng" disabled>Descargar PNG</button>
       </div>
 
       <div class="preview">
@@ -135,10 +134,9 @@ function cornerType(val){
 }
 
 $('logoPct').addEventListener('input', () => $('logoPctVal').textContent = $('logoPct').value + '%');
-$('dotRound').addEventListener('input', () => $('dotRoundVal').textContent = Number($('dotRound').value).toFixed(2));
 
 $('gen').onclick = () => {
-  // Base robusta: usa el directorio actual, NO depende del nombre del archivo
+  // Base robusta: usa el directorio actual; no depende del nombre del archivo
   const baseDefault = new URL('redirect.html', location.href).toString();
   const base = ($('baseUrl').value.trim() || baseDefault);
 
@@ -157,16 +155,16 @@ $('gen').onclick = () => {
   const opts = {
     width: size,
     height: size,
-    type: "canvas",
+    type: "svg",                   // salida vectorial
     data: target,
-    image: logo || undefined,
+    image: logo || undefined,      // usa tu SVG
     imageOptions: {
       crossOrigin: "anonymous",
       margin: 2,
       imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
     },
     qrOptions: { errorCorrectionLevel: ec },
-    dotsOptions: { type: "rounded", color: color }, // compatible en todas las builds
+    dotsOptions: { type: "rounded", color },
     cornersSquareOptions: { type: corner, color },
     cornersDotOptions: { type: "dot", color },
     backgroundOptions: { color: "#ffffff" }
@@ -180,11 +178,22 @@ $('gen').onclick = () => {
     qr.update(opts);
   }
 
-  $('dl').disabled = false;
+  $('dlSvg').disabled = false;
+  $('dlPng').disabled = false;
   $('status').textContent = '';
 };
 
-$('dl').onclick = async () => {
+$('dlSvg').onclick = async () => {
+  if (!qr) return;
+  try {
+    await qr.download({ name: "qr_estilizado", extension: "svg" });
+  } catch (e) {
+    $('status').textContent = 'No se pudo descargar el SVG. Revisa permisos del navegador.';
+    console.error(e);
+  }
+};
+
+$('dlPng').onclick = async () => {
   if (!qr) return;
   try {
     await qr.download({ name: "qr_estilizado", extension: "png" });
@@ -194,11 +203,11 @@ $('dl').onclick = async () => {
   }
 };
 
-// Valores por defecto al abrir (rutas robustas)
+// Valores por defecto al abrir (rutas robustas y tu logo SVG por defecto)
 window.addEventListener('load', () => {
   $('baseUrl').value = new URL('redirect.html', location.href).toString();
   $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  $('logoUrl').value = new URL('assets/1024-jmc.png', location.href).toString(); // tu logo por defecto
+  $('logoUrl').value = new URL('assets/jmcsvg.svg', location.href).toString(); // tu logo SVG
 });
 </script>
 </body>
