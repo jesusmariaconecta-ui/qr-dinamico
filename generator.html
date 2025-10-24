@@ -143,28 +143,40 @@ $('gen').onclick = async () => {
   ctx.drawImage(img, 0, 0, size, size);
 
   // logo centrado (opcional)
-  if (logo) {
-    try {
-      const logoImg = await loadImage(logo);
-      const box = Math.floor(size * 0.22);
-      const x = Math.floor((size - box)/2), y = Math.floor((size - box)/2);
-      // placa
-      ctx.fillStyle = '#ffffff';
-      const r = Math.floor(box*0.25);
-      ctx.beginPath();
-      ctx.moveTo(x+r,y);
-      ctx.arcTo(x+box,y,x+box,y+box,r);
-      ctx.arcTo(x+box,y+box,x,y+box,r);
-      ctx.arcTo(x,y+box,x,y,r);
-      ctx.arcTo(x,y,x+box,y,r);
-      ctx.closePath(); ctx.fill();
-      // borde
-      ctx.lineWidth = Math.max(4, Math.floor(box*0.05));
-      ctx.strokeStyle = color; ctx.stroke();
-      // logo
-      ctx.drawImage(logoImg, x+Math.floor(box*0.12), y+Math.floor(box*0.12), Math.floor(box*0.76), Math.floor(box*0.76));
-    } catch(e){ console.warn('No se pudo cargar el logo:', e); }
+  // logo centrado (opcional, con borde y centrado perfecto)
+if (logo) {
+  try {
+    const logoImg = await loadImage(logo);
+    const box = Math.floor(size * 0.22); // tamaño del cuadro central del logo
+    const x = Math.floor((size - box) / 2);
+    const y = Math.floor((size - box) / 2);
+
+    // fondo blanco redondeado (para legibilidad)
+    const r = Math.floor(box * 0.25);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + box, y, x + box, y + box, r);
+    ctx.arcTo(x + box, y + box, x, y + box, r);
+    ctx.arcTo(x, y + box, x, y, r);
+    ctx.arcTo(x, y, x + box, y, r);
+    ctx.closePath();
+    ctx.fill();
+
+    // borde del cuadro (azul institucional)
+    ctx.lineWidth = Math.max(4, Math.floor(box * 0.05));
+    ctx.strokeStyle = color;
+    ctx.stroke();
+
+    // logo centrado con padding interno
+    const padding = Math.floor(box * 0.14);
+    const logoSize = box - padding * 2;
+    ctx.drawImage(logoImg, x + padding, y + padding, logoSize, logoSize);
+  } catch (e) {
+    console.warn('No se pudo cargar el logo:', e);
   }
+}
+
 
   // título
   drawCaption(ctx, title, canvas.width, canvas.height);
