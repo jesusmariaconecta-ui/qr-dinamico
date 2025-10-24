@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QR Studio — Estilizado (SVG + logo + esquinas redondeadas)</title>
+  <title>QR Studio — Estilizado (logo grande + esquinas redondeadas)</title>
+
+  <!-- Librería estable que expone window.QRCodeStyling -->
+  <script src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
 
   <style>
     :root{--brand:#0b3a75}
@@ -16,14 +19,12 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
     button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
-    .btn-ghost{background:#eef2f7;color:#0b3a75}
     .preview{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
     .caption{color:var(--brand);text-align:center;margin-top:8px;font-weight:700}
     .small{color:#6b7280;font-size:12px}
     .slider{display:flex;gap:8px;align-items:center}
     .slider input{flex:1}
-    #qr svg{background:#fff;border-radius:24px}
-    #status{white-space:pre-line}
+    #qr canvas{background:#fff;border-radius:24px}
   </style>
 </head>
 <body>
@@ -31,17 +32,17 @@
     <div class="card">
       <h1>QR Studio — Estilizado</h1>
       <p class="small">
-        Genera QRs que apuntan a <code>redirect.html?k=…</code> (dinámicos: editas <code>target.json</code>).<br>
-        Render <strong>SVG</strong>, logo <strong>SVG</strong> (nítido), descarga en SVG o PNG. Guarda tus últimos valores.
+        Este generador crea QRs que apuntan a <code>redirect.html?k=…</code> para que sean <strong>dinámicos</strong>.
+        Cambias los destinos en <code>target.json</code>. Usa el logo desde este mismo dominio (Pages) para evitar CORS.
       </p>
 
       <div class="row">
         <div>
-          <label>Base URL del redirect</label>
+          <label>Base URL del redirect (normalmente esta):</label>
           <input id="baseUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/redirect.html" />
         </div>
         <div>
-          <label>Destino (<code>k=</code>)</label>
+          <label>Destino (parámetro <code>k=</code>)</label>
           <select id="key">
             <option value="android">Android (temporal → luego Play)</option>
             <option value="ios">iOS (App Store)</option>
@@ -64,8 +65,8 @@
 
       <div class="row">
         <div>
-          <label>Logo (URL SVG)</label>
-          <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/jmcsvg.svg" />
+          <label>Logo (URL PNG/SVG) — centrado</label>
+          <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/1024-jmc.png" />
           <div class="slider">
             <label style="min-width:110px">Logo %</label>
             <input id="logoPct" type="range" min="10" max="40" step="1" value="28" />
@@ -75,16 +76,23 @@
         <div>
           <label>Tamaño QR (px)</label>
           <input id="size" type="number" value="720" min="256" step="16" />
-          <label style="margin-top:10px">Esquinas</label>
+          <div class="slider" style="margin-top:10px">
+            <label style="min-width:110px">Redondeo módulos</label>
+            <input id="dotRound" type="range" min="0" max="1" step="0.05" value="0.85" />
+            <span id="dotRoundVal">0.85</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Esquinas (finder corners)</label>
           <select id="cornerStyle">
             <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
             <option value="rounded">Redondeadas</option>
             <option value="square">Cuadradas</option>
           </select>
         </div>
-      </div>
-
-      <div class="row">
         <div>
           <label>Error correction</label>
           <select id="ecLevel">
@@ -94,14 +102,11 @@
             <option value="L">L</option>
           </select>
         </div>
-        <div></div>
       </div>
 
       <div class="actions">
-        <button id="gen" disabled>Generar QR</button>
-        <button id="dlSvg" disabled>Descargar SVG</button>
-        <button id="dlPng" disabled>Descargar PNG</button>
-        <button id="reset" class="btn-ghost" type="button">Restablecer valores</button>
+        <button id="gen">Generar QR</button>
+        <button id="dl" disabled>Descargar PNG</button>
       </div>
 
       <div class="preview">
@@ -113,204 +118,92 @@
           <label>URL final codificada (solo lectura)</label>
           <input id="finalUrl" readonly />
           <p class="small">Tip: añade <code>&show=1</code> al final para ver la redirección sin saltar.</p>
-          <p class="small"><strong>Estado:</strong></p>
-          <pre id="status" class="small">Cargando librería…</pre>
+          <p class="small" id="status"></p>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Cargador resiliente de librería -->
-  <script>
-    function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('no se pudo cargar: '+src));document.head.appendChild(s);});}
-    async function ensureLib(){
-      const cdns = [
-        "https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js",
-        "https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js",
-        "https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js"
-      ];
-      for (const url of cdns){
-        try{
-          document.getElementById('status').textContent = 'Cargando librería…\n' + url;
-          await loadScript(url);
-          if (typeof window.QRCodeStyling === 'function') {
-            document.getElementById('status').textContent = 'Librería OK';
-            document.getElementById('gen').disabled = false;
-            return;
-          }
-        }catch(e){ console.warn(e); }
-      }
-      document.getElementById('status').textContent = 'Error: no se pudo cargar QRCodeStyling desde CDNs.';
-    }
-    ensureLib();
-  </script>
+<script>
+const $ = id => document.getElementById(id);
+let qr; // instancia global
 
-  <script>
-    const $ = id => document.getElementById(id);
-    let qr; // instancia global
-    const STORE_KEY = 'qrstudio_prefs_v1';
+function cornerType(val){
+  if (val === 'extra-rounded') return 'extra-rounded';
+  if (val === 'rounded') return 'rounded';
+  return 'square';
+}
 
-    function cornerType(val){
-      if (val === 'extra-rounded') return 'extra-rounded';
-      if (val === 'rounded') return 'rounded';
-      return 'square';
-    }
+$('logoPct').addEventListener('input', () => $('logoPctVal').textContent = $('logoPct').value + '%');
+$('dotRound').addEventListener('input', () => $('dotRoundVal').textContent = Number($('dotRound').value).toFixed(2));
 
-    // ---- Defaults (precargados) ----
-    function getDefaults(){
-      return {
-        baseUrl: new URL('redirect.html', location.href).toString(),
-        key: 'ios',
-        title: 'Jesús María Conecta — App Store (iOS)',
-        color: '#0b3a75',
-        logoUrl: new URL('assets/jmcsvg.svg', location.href).toString(),
-        logoPct: 28,
-        size: 720,
-        cornerStyle: 'extra-rounded',
-        ecLevel: 'H'
-      };
-    }
+$('gen').onclick = () => {
+  // Base robusta: usa el directorio actual, NO depende del nombre del archivo
+  const baseDefault = new URL('redirect.html', location.href).toString();
+  const base = ($('baseUrl').value.trim() || baseDefault);
 
-    // ---- Persistencia en localStorage ----
-    function loadPrefs(){
-      try {
-        const raw = localStorage.getItem(STORE_KEY);
-        if (!raw) return null;
-        return JSON.parse(raw);
-      } catch { return null; }
-    }
-    function savePrefs(){
-      const prefs = {
-        baseUrl: $('#baseUrl').value.trim(),
-        key: $('#key').value,
-        title: $('#title').value.trim(),
-        color: $('#color').value,
-        logoUrl: $('#logoUrl').value.trim(),
-        logoPct: parseInt($('#logoPct').value,10),
-        size: parseInt($('#size').value,10),
-        cornerStyle: $('#cornerStyle').value,
-        ecLevel: $('#ecLevel').value
-      };
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(prefs)); } catch {}
-    }
-    function applyPrefs(p){
-      $('#baseUrl').value   = p.baseUrl;
-      $('#key').value       = p.key;
-      $('#title').value     = p.title;
-      $('#color').value     = p.color;
-      $('#logoUrl').value   = p.logoUrl;
-      $('#logoPct').value   = p.logoPct;
-      $('#logoPctVal').textContent = p.logoPct + '%';
-      $('#size').value      = p.size;
-      $('#cornerStyle').value = p.cornerStyle;
-      $('#ecLevel').value   = p.ecLevel;
-    }
-    function resetPrefs(){
-      const defs = getDefaults();
-      applyPrefs(defs);
-      try { localStorage.removeItem(STORE_KEY); } catch {}
-      $('#status').textContent = 'Valores restablecidos a los predeterminados.';
-    }
+  const key   = $('key').value;
+  const title = $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
+  const color = $('color').value || '#0b3a75';
+  const logo  = $('logoUrl').value.trim();
+  const size  = Math.max(256, parseInt($('size').value||'720',10));
+  const ec    = $('ecLevel').value || 'H';
+  const corner= cornerType($('cornerStyle').value);
 
-    // ---- Cargar SVG externo como data URL (anti-CORS/404) ----
-    async function resolveLogo(url) {
-      const clean = (url||"").trim();
-      if (!clean) return undefined;
-      try {
-        const res = await fetch(clean, {cache: "no-store"});
-        if (!res.ok) throw new Error("HTTP "+res.status);
-        const svg = await res.text();
-        if (!svg.includes("<svg")) throw new Error("No es un SVG válido");
-        return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-      } catch (e) {
-        console.warn("Logo SVG no cargó, sigo sin logo:", e);
-        $('#status').textContent = 'Aviso: no se pudo cargar el logo (se generó sin logo).';
-        return undefined; // seguimos sin logo
-      }
-    }
+  const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
+  $('finalUrl').value = target;
+  $('caption').textContent = title;
 
-    // Actualiza etiqueta de porcentaje
-    $('#logoPct').addEventListener('input', () => $('#logoPctVal').textContent = $('#logoPct').value + '%');
+  const opts = {
+    width: size,
+    height: size,
+    type: "canvas",
+    data: target,
+    image: logo || undefined,
+    imageOptions: {
+      crossOrigin: "anonymous",
+      margin: 2,
+      imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
+    },
+    qrOptions: { errorCorrectionLevel: ec },
+    dotsOptions: { type: "rounded", color: color }, // compatible en todas las builds
+    cornersSquareOptions: { type: corner, color },
+    cornersDotOptions: { type: "dot", color },
+    backgroundOptions: { color: "#ffffff" }
+  };
 
-    // Guardar automáticamente cuando cambien los campos
-    ['baseUrl','key','title','color','logoUrl','logoPct','size','cornerStyle','ecLevel'].forEach(id=>{
-      $(id).addEventListener('change', savePrefs);
-      $(id).addEventListener('input',  savePrefs);
-    });
+  if (!qr) {
+    qr = new QRCodeStyling(opts);
+    $('qr').innerHTML = "";
+    qr.append($('qr'));
+  } else {
+    qr.update(opts);
+  }
 
-    // Generar
-    $('#gen').onclick = async () => {
-      if (typeof window.QRCodeStyling !== 'function'){
-        $('#status').textContent = 'Error: la librería no está disponible.';
-        return;
-      }
-      const base   = ($('#baseUrl').value.trim() || getDefaults().baseUrl);
-      const key    = $('#key').value;
-      const title  = $('#title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
-      const color  = $('#color').value || '#0b3a75';
-      const size   = Math.max(256, parseInt($('#size').value||'720',10));
-      const ec     = $('#ecLevel').value || 'H';
-      const corner = cornerType($('#cornerStyle').value);
+  $('dl').disabled = false;
+  $('status').textContent = '';
+};
 
-      const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
-      $('#finalUrl').value = target;
-      $('#caption').textContent = title;
+$('dl').onclick = async () => {
+  if (!qr) return;
+  try {
+    await qr.download({ name: "qr_estilizado", extension: "png" });
+  } catch (e) {
+    $('status').textContent = 'No se pudo descargar el PNG. Revisa permisos del navegador.';
+    console.error(e);
+  }
+};
 
-      const logoUrl = $('#logoUrl').value.trim();
-      const logoDataUrl = await resolveLogo(logoUrl);
-
-      const opts = {
-        width: size,
-        height: size,
-        type: "svg",                   // salida vectorial
-        data: target,
-        image: logoDataUrl,            // data URL o undefined
-        imageOptions: {
-          margin: 2,
-          imageSize: (parseInt($('#logoPct').value,10) / 100) // 0.10–0.40
-        },
-        qrOptions: { errorCorrectionLevel: ec },
-        dotsOptions: { type: "rounded", color },
-        cornersSquareOptions: { type: corner, color },
-        cornersDotOptions: { type: "dot", color },
-        backgroundOptions: { color: "#ffffff" }
-      };
-
-      try {
-        if (!qr) {
-          qr = new window.QRCodeStyling(opts);
-          $('#qr').innerHTML = "";
-          qr.append($('#qr'));
-        } else {
-          qr.update(opts);
-        }
-        $('#dlSvg').disabled = false;
-        $('#dlPng').disabled = false;
-        $('#status').textContent = 'QR generado ✔';
-      } catch (e) {
-        console.error(e);
-        $('#status').textContent = 'Error al renderizar el QR. Prueba quitar el logo o bajar el %.';
-      }
-    };
-
-    // Descargas
-    $('#dlSvg').onclick = async () => { if (qr) { try { await qr.download({ name: "qr_estilizado", extension: "svg" }); } catch(e){ $('#status').textContent='No se pudo descargar el SVG.'; } } };
-    $('#dlPng').onclick = async () => { if (qr) { try { await qr.download({ name: "qr_estilizado", extension: "png" }); } catch(e){ $('#status').textContent='No se pudo descargar el PNG.'; } } };
-
-    // Restablecer
-    $('#reset').onclick = resetPrefs;
-
-    // Inicializar (defaults + prefs guardadas)
-    window.addEventListener('load', () => {
-      const defs = getDefaults();
-      applyPrefs(defs);                 // precargar defaults
-      const saved = loadPrefs();
-      if (saved) applyPrefs(saved);     // sobreescribir con lo último usado
-      $('#status').textContent = 'Listo — valores precargados.';
-    });
-  </script>
+// Valores por defecto al abrir (rutas robustas)
+window.addEventListener('load', () => {
+  $('baseUrl').value = new URL('redirect.html', location.href).toString();
+  $('title').value   = 'Jesús María Conecta — App Store (iOS)';
+  $('logoUrl').value = new URL('assets/1024-jmc.png', location.href).toString(); // tu logo por defecto
+});
+</script>
 </body>
 </html>
+
 
 
 
