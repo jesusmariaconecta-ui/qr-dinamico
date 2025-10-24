@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>QR Studio — Estilizado (logo grande + esquinas redondeadas)</title>
 
-  <!-- Librería para estilos avanzados de QR -->
-  <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0/lib/qr-code-styling.js"></script>
+  <!-- Librería (versión estable que expone QRCodeStyling en window) -->
+  <script src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
 
   <style>
     :root{--brand:#0b3a75}
@@ -24,7 +24,7 @@
     .small{color:#6b7280;font-size:12px}
     .slider{display:flex;gap:8px;align-items:center}
     .slider input{flex:1}
-    canvas{background:#fff;border-radius:24px}
+    #qr canvas{background:#fff;border-radius:24px}
   </style>
 </head>
 <body>
@@ -33,12 +33,12 @@
       <h1>QR Studio — Estilizado</h1>
       <p class="small">
         Este generador crea QRs que apuntan a <code>redirect.html?k=…</code> para que sean <strong>dinámicos</strong>.
-        Cambias los destinos en <code>target.json</code>.
+        Cambias los destinos en <code>target.json</code>. Usa el logo desde este mismo dominio (Pages) para evitar CORS.
       </p>
 
       <div class="row">
         <div>
-          <label>Base URL del redirect (esta misma página suele ser la base):</label>
+          <label>Base URL del redirect (normalmente esta):</label>
           <input id="baseUrl" placeholder="https://tuusuario.github.io/qr-dinamico/redirect.html" />
         </div>
         <div>
@@ -65,12 +65,12 @@
 
       <div class="row">
         <div>
-          <label>Logo (URL PNG/SVG) — se coloca al centro</label>
-          <input id="logoUrl" placeholder="https://.../assets/1024-jmc.png" />
+          <label>Logo (URL PNG/SVG) — centrado</label>
+          <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/1024-jmc.png" />
           <div class="slider">
             <label style="min-width:110px">Logo %</label>
-            <input id="logoPct" type="range" min="10" max="40" step="1" value="26" />
-            <span id="logoPctVal">26%</span>
+            <input id="logoPct" type="range" min="10" max="40" step="1" value="28" />
+            <span id="logoPctVal">28%</span>
           </div>
         </div>
         <div>
@@ -78,17 +78,17 @@
           <input id="size" type="number" value="720" min="256" step="16" />
           <div class="slider" style="margin-top:10px">
             <label style="min-width:110px">Redondeo módulos</label>
-            <input id="dotRound" type="range" min="0" max="1" step="0.05" value="0.8" />
-            <span id="dotRoundVal">0.80</span>
+            <input id="dotRound" type="range" min="0" max="1" step="0.05" value="0.85" />
+            <span id="dotRoundVal">0.85</span>
           </div>
         </div>
       </div>
 
       <div class="row">
         <div>
-          <label>Estilo esquinas (finder corners)</label>
+          <label>Esquinas (finder corners)</label>
           <select id="cornerStyle">
-            <option value="extra-rounded">Extra redondeadas (como tu ejemplo)</option>
+            <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
             <option value="rounded">Redondeadas</option>
             <option value="square">Cuadradas</option>
           </select>
@@ -96,7 +96,7 @@
         <div>
           <label>Error correction</label>
           <select id="ecLevel">
-            <option value="H">H (más robusto para logos grandes)</option>
+            <option value="H">H (recomendado con logos grandes)</option>
             <option value="Q">Q</option>
             <option value="M">M</option>
             <option value="L">L</option>
@@ -117,9 +117,8 @@
         <div>
           <label>URL final codificada (solo lectura)</label>
           <input id="finalUrl" readonly />
-          <p class="small">
-            Tip: agrega <code>&show=1</code> a la URL para revisar sin redirigir.
-          </p>
+          <p class="small">Tip: añade <code>&show=1</code> al final para ver la página de redirección sin saltar.</p>
+          <p class="small" id="status"></p>
         </div>
       </div>
     </div>
@@ -127,7 +126,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-let qr; // instancia global para actualizar/descargar
+let qr; // instancia global
 
 function cornerType(val){
   if (val === 'extra-rounded') return 'extra-rounded';
@@ -145,16 +144,14 @@ $('gen').onclick = () => {
   const color= $('color').value || '#0b3a75';
   const logo = $('logoUrl').value.trim();
   const size = Math.max(256, parseInt($('size').value||'720',10));
-  const dotsR= Math.max(0, Math.min(1, parseFloat($('dotRound').value||'0.8')));
+  const dotsR= Math.max(0, Math.min(1, parseFloat($('dotRound').value||'0.85')));
   const ec   = $('ecLevel').value || 'H';
   const corner = cornerType($('cornerStyle').value);
 
   const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
-
   $('finalUrl').value = target;
   $('caption').textContent = title;
 
-  // Crear/actualizar QR estilizado
   const opts = {
     width: size,
     height: size,
@@ -164,25 +161,16 @@ $('gen').onclick = () => {
     imageOptions: {
       crossOrigin: "anonymous",
       margin: 2,
-      imageSize: (parseInt($('logoPct').value,10) / 100) // porcentaje del tamaño del QR
+      imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
     },
-    qrOptions: {
-      errorCorrectionLevel: ec
-    },
+    qrOptions: { errorCorrectionLevel: ec },
     dotsOptions: {
-      type: "rounded",     // módulos redondeados
-      gradient: undefined,
-      color: color,
-      roundSize: dotsR     // 0-1 (no documentado oficialmente, pero algunas builds lo exponen)
-    },
-    cornersSquareOptions: {
-      type: corner,        // 'extra-rounded' para marco como tu ejemplo
+      type: "rounded",
       color: color
+      // (no usamos roundSize por compatibilidad; el slider es informativo)
     },
-    cornersDotOptions: {
-      type: "dot",
-      color: color
-    },
+    cornersSquareOptions: { type: corner, color: color },
+    cornersDotOptions: { type: "dot", color: color },
     backgroundOptions: { color: "#ffffff" }
   };
 
@@ -195,20 +183,27 @@ $('gen').onclick = () => {
   }
 
   $('dl').disabled = false;
+  $('status').textContent = '';
 };
 
 $('dl').onclick = async () => {
   if (!qr) return;
-  await qr.download({ name: "qr_estilizado", extension: "png" });
+  try {
+    await qr.download({ name: "qr_estilizado", extension: "png" });
+  } catch (e) {
+    $('status').textContent = 'No se pudo descargar el PNG. Revisa permisos del navegador.';
+    console.error(e);
+  }
 };
 
-// valores por defecto cómodos al abrir
+// valores por defecto al abrir
 window.addEventListener('load', () => {
   $('baseUrl').value = location.origin + location.pathname.replace(/generator_styled\.html$/,'') + 'redirect.html';
   $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  // Logo por defecto (ajústalo a tu ruta real)
+  // Logo por defecto desde el mismo Pages (evita CORS)
   $('logoUrl').value = location.origin + location.pathname.replace(/generator_styled\.html$/,'') + 'assets/1024-jmc.png';
 });
 </script>
 </body>
 </html>
+
