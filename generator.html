@@ -76,14 +76,12 @@
         <div>
           <label>Tamaño QR (px)</label>
           <input id="size" type="number" value="720" min="256" step="16" />
-          <div class="slider" style="margin-top:10px">
-            <label style="min-width:110px">Esquinas</label>
-            <select id="cornerStyle">
-              <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
-              <option value="rounded">Redondeadas</option>
-              <option value="square">Cuadradas</option>
-            </select>
-          </div>
+          <label style="margin-top:10px">Esquinas (finder corners)</label>
+          <select id="cornerStyle">
+            <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
+            <option value="rounded">Redondeadas</option>
+            <option value="square">Cuadradas</option>
+          </select>
         </div>
       </div>
 
@@ -97,9 +95,7 @@
             <option value="L">L</option>
           </select>
         </div>
-        <div>
-          <!-- vacío para balance visual -->
-        </div>
+        <div></div>
       </div>
 
       <div class="actions">
@@ -133,35 +129,53 @@ function cornerType(val){
   return 'square';
 }
 
+// Convierte el SVG externo a data URL para evitar CORS/404 intermitentes
+async function resolveLogo(url) {
+  const clean = (url||"").trim();
+  if (!clean) return undefined;
+  try {
+    const res = await fetch(clean, {cache: "no-store"});
+    if (!res.ok) throw new Error("HTTP "+res.status);
+    const svg = await res.text();
+    if (!svg.includes("<svg")) throw new Error("No es un SVG válido");
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  } catch (e) {
+    console.warn("Logo SVG no cargó, sigo sin logo:", e);
+    $('#status').textContent = 'No se pudo cargar el logo (se generó sin logo).';
+    return undefined;
+  }
+}
+
 $('logoPct').addEventListener('input', () => $('logoPctVal').textContent = $('logoPct').value + '%');
 
-$('gen').onclick = () => {
-  // Base robusta: usa el directorio actual; no depende del nombre del archivo
+$('gen').onclick = async () => {
   const baseDefault = new URL('redirect.html', location.href).toString();
-  const base = ($('baseUrl').value.trim() || baseDefault);
+  const base = ($('#baseUrl').value.trim() || baseDefault);
 
-  const key   = $('key').value;
-  const title = $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
-  const color = $('color').value || '#0b3a75';
-  const logo  = $('logoUrl').value.trim();
-  const size  = Math.max(256, parseInt($('size').value||'720',10));
-  const ec    = $('ecLevel').value || 'H';
-  const corner= cornerType($('cornerStyle').value);
+  const key   = $('#key').value;
+  const title = $('#title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
+  const color = $('#color').value || '#0b3a75';
+  const size  = Math.max(256, parseInt($('#size').value||'720',10));
+  const ec    = $('#ecLevel').value || 'H';
+  const corner= cornerType($('#cornerStyle').value);
 
   const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
-  $('finalUrl').value = target;
-  $('caption').textContent = title;
+  $('#finalUrl').value = target;
+  $('#caption').textContent = title;
+
+  // Resolver logo a data URL (o undefined)
+  const logoUrl = $('#logoUrl').value.trim();
+  const logoDataUrl = await resolveLogo(logoUrl);
 
   const opts = {
     width: size,
     height: size,
     type: "svg",                   // salida vectorial
     data: target,
-    image: logo || undefined,      // usa tu SVG
+    image: logoDataUrl,            // data URL o undefined
     imageOptions: {
-      crossOrigin: "anonymous",
       margin: 2,
-      imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
+      imageSize: (parseInt($('#logoPct').value,10) / 100) // 0.10–0.40
     },
     qrOptions: { errorCorrectionLevel: ec },
     dotsOptions: { type: "rounded", color },
@@ -170,44 +184,40 @@ $('gen').onclick = () => {
     backgroundOptions: { color: "#ffffff" }
   };
 
-  if (!qr) {
-    qr = new QRCodeStyling(opts);
-    $('qr').innerHTML = "";
-    qr.append($('qr'));
-  } else {
-    qr.update(opts);
-  }
-
-  $('dlSvg').disabled = false;
-  $('dlPng').disabled = false;
-  $('status').textContent = '';
-};
-
-$('dlSvg').onclick = async () => {
-  if (!qr) return;
   try {
-    await qr.download({ name: "qr_estilizado", extension: "svg" });
+    if (!qr) {
+      qr = new QRCodeStyling(opts);
+      $('#qr').innerHTML = "";
+      qr.append($('#qr'));
+    } else {
+      qr.update(opts);
+    }
+    $('#dlSvg').disabled = false;
+    $('#dlPng').disabled = false;
+    $('#status').textContent = '';
   } catch (e) {
-    $('status').textContent = 'No se pudo descargar el SVG. Revisa permisos del navegador.';
     console.error(e);
+    $('#status').textContent = 'Error al renderizar el QR. Prueba quitar el logo o bajar el %.';
   }
 };
 
-$('dlPng').onclick = async () => {
+$('#dlSvg').onclick = async () => {
   if (!qr) return;
-  try {
-    await qr.download({ name: "qr_estilizado", extension: "png" });
-  } catch (e) {
-    $('status').textContent = 'No se pudo descargar el PNG. Revisa permisos del navegador.';
-    console.error(e);
-  }
+  try { await qr.download({ name: "qr_estilizado", extension: "svg" }); }
+  catch(e){ $('#status').textContent='No se pudo descargar el SVG.'; console.error(e); }
 };
 
-// Valores por defecto al abrir (rutas robustas y tu logo SVG por defecto)
+$('#dlPng').onclick = async () => {
+  if (!qr) return;
+  try { await qr.download({ name: "qr_estilizado", extension: "png" }); }
+  catch(e){ $('#status').textContent='No se pudo descargar el PNG.'; console.error(e); }
+};
+
+// Defaults seguros al abrir (rutas robustas + tu logo SVG)
 window.addEventListener('load', () => {
-  $('baseUrl').value = new URL('redirect.html', location.href).toString();
-  $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  $('logoUrl').value = new URL('assets/jmcsvg.svg', location.href).toString(); // tu logo SVG
+  $('#baseUrl').value = new URL('redirect.html', location.href).toString();
+  $('#title').value   = 'Jesús María Conecta — App Store (iOS)';
+  $('#logoUrl').value = new URL('assets/jmcsvg.svg', location.href).toString(); // tu logo SVG
 });
 </script>
 </body>
