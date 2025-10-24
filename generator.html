@@ -1,9 +1,11 @@
+respaldo html para hacer qr
+
 <!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QR Studio — Estilizado (logo PNG + título incrustado)</title>
+  <title>QR Studio — Estilizado (logo grande + esquinas redondeadas)</title>
 
   <!-- Librería estable que expone window.QRCodeStyling -->
   <script src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
@@ -25,7 +27,6 @@
     .slider{display:flex;gap:8px;align-items:center}
     .slider input{flex:1}
     #qr canvas{background:#fff;border-radius:24px}
-    #outCanvas{background:#fff;border-radius:24px;max-width:100%}
   </style>
 </head>
 <body>
@@ -34,8 +35,7 @@
       <h1>QR Studio — Estilizado</h1>
       <p class="small">
         Este generador crea QRs que apuntan a <code>redirect.html?k=…</code> para que sean <strong>dinámicos</strong>.
-        Cambias los destinos en <code>target.json</code>. Render en <strong>canvas</strong> y logo <strong>PNG</strong>.
-        El <strong>título</strong> se incrusta debajo del QR y queda incluido en el PNG descargado.
+        Cambias los destinos en <code>target.json</code>. Usa el logo desde este mismo dominio (Pages) para evitar CORS.
       </p>
 
       <div class="row">
@@ -56,7 +56,7 @@
 
       <div class="row">
         <div>
-          <label>Título debajo del QR (editable)</label>
+          <label>Título debajo del QR</label>
           <input id="title" placeholder="Jesús María Conecta — App Store (iOS)" />
         </div>
         <div>
@@ -67,7 +67,7 @@
 
       <div class="row">
         <div>
-          <label>Logo (URL PNG) — centrado</label>
+          <label>Logo (URL PNG/SVG) — centrado</label>
           <input id="logoUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/assets/1024-jmc.png" />
           <div class="slider">
             <label style="min-width:110px">Logo %</label>
@@ -78,23 +78,31 @@
         <div>
           <label>Tamaño QR (px)</label>
           <input id="size" type="number" value="720" min="256" step="16" />
-          <div style="margin-top:10px">
-            <label>Esquinas (finder corners)</label>
-            <select id="cornerStyle">
-              <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
-              <option value="rounded">Redondeadas</option>
-              <option value="square">Cuadradas</option>
-            </select>
+          <div class="slider" style="margin-top:10px">
+            <label style="min-width:110px">Redondeo módulos</label>
+            <input id="dotRound" type="range" min="0" max="1" step="0.05" value="0.85" />
+            <span id="dotRoundVal">0.85</span>
           </div>
-          <div style="margin-top:10px">
-            <label>Error correction</label>
-            <select id="ecLevel">
-              <option value="H">H (recomendado con logos grandes)</option>
-              <option value="Q">Q</option>
-              <option value="M">M</option>
-              <option value="L">L</option>
-            </select>
-          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Esquinas (finder corners)</label>
+          <select id="cornerStyle">
+            <option value="extra-rounded">Extra redondeadas (tipo “marco”)</option>
+            <option value="rounded">Redondeadas</option>
+            <option value="square">Cuadradas</option>
+          </select>
+        </div>
+        <div>
+          <label>Error correction</label>
+          <select id="ecLevel">
+            <option value="H">H (recomendado con logos grandes)</option>
+            <option value="Q">Q</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+          </select>
         </div>
       </div>
 
@@ -105,9 +113,8 @@
 
       <div class="preview">
         <div>
-          <div id="qr" style="display:none"></div>
-          <canvas id="outCanvas"></canvas>
-          <div class="caption">Previsualización</div>
+          <div id="qr"></div>
+          <div class="caption" id="caption">Previsualización</div>
         </div>
         <div>
           <label>URL final codificada (solo lectura)</label>
@@ -130,78 +137,24 @@ function cornerType(val){
 }
 
 $('logoPct').addEventListener('input', () => $('logoPctVal').textContent = $('logoPct').value + '%');
+$('dotRound').addEventListener('input', () => $('dotRoundVal').textContent = Number($('dotRound').value).toFixed(2));
 
-function drawCaption(ctx, text, canvasWidth, yStart) {
-  // Dibuja el título centrado, con salto de línea automático
-  const maxWidth = canvasWidth * 0.9;
-  const baseFont = Math.max(18, Math.floor(canvasWidth * 0.045)); // tamaño relativo
-  ctx.fillStyle = '#0b3a75';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.font = '700 ' + baseFont + 'px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
-
-  const words = text.trim() ? text.trim().split(/\s+/) : [''];
-  let line = '';
-  const lines = [];
-  for (const w of words) {
-    const test = line ? line + ' ' + w : w;
-    const m = ctx.measureText(test);
-    if (m.width > maxWidth) {
-      if (line) lines.push(line);
-      line = w;
-    } else {
-      line = test;
-    }
-  }
-  if (line) lines.push(line);
-
-  // dibujar líneas
-  let y = yStart;
-  for (const l of lines) {
-    ctx.fillText(l, canvasWidth/2, y);
-    y += baseFont * 1.25;
-  }
-  return y - yStart; // alto consumido
-}
-
-function composeWithTitle(qrCanvas, title) {
-  // Crea un canvas compuesto: QR arriba + título abajo (y algo de margen)
-  const qrSize = qrCanvas.width; // cuadrado
-  const padding = Math.floor(qrSize * 0.07);
-  const captionSpace = Math.floor(qrSize * 0.35); // espacio suficiente para 2-3 líneas
-  const out = $('outCanvas');
-  out.width  = qrSize + padding * 2;
-  out.height = qrSize + padding * 2 + captionSpace;
-
-  const ctx = out.getContext('2d');
-  // fondo blanco
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, out.width, out.height);
-
-  // pegar QR centrado
-  ctx.drawImage(qrCanvas, padding, padding);
-
-  // título
-  const used = drawCaption(ctx, title, out.width, padding + qrSize + Math.floor(qrSize * 0.06));
-
-  // si sobró mucho espacio, no pasa nada; mantenemos alto fijo para consistencia
-  return out;
-}
-
-$('gen').onclick = async () => {
+$('gen').onclick = () => {
+  // Base robusta: usa el directorio actual, NO depende del nombre del archivo
   const baseDefault = new URL('redirect.html', location.href).toString();
   const base = ($('baseUrl').value.trim() || baseDefault);
 
   const key   = $('key').value;
   const title = $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
   const color = $('color').value || '#0b3a75';
-  const logo  = $('logoUrl').value.trim();       // PNG en el mismo dominio (Pages)
+  const logo  = $('logoUrl').value.trim();
   const size  = Math.max(256, parseInt($('size').value||'720',10));
   const ec    = $('ecLevel').value || 'H';
   const corner= cornerType($('cornerStyle').value);
 
   const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
   $('finalUrl').value = target;
+  $('caption').textContent = title;
 
   const opts = {
     width: size,
@@ -215,60 +168,43 @@ $('gen').onclick = async () => {
       imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
     },
     qrOptions: { errorCorrectionLevel: ec },
-    dotsOptions: { type: "rounded", color: color },
-    cornersSquareOptions: { type: corner, color: color },
-    cornersDotOptions: { type: "dot", color: color },
+    dotsOptions: { type: "rounded", color: color }, // compatible en todas las builds
+    cornersSquareOptions: { type: corner, color },
+    cornersDotOptions: { type: "dot", color },
     backgroundOptions: { color: "#ffffff" }
   };
 
-  try {
-    if (!qr) {
-      qr = new QRCodeStyling(opts);
-      $('qr').innerHTML = "";
-      qr.append($('qr')); // genera un <canvas> dentro de #qr
-    } else {
-      qr.update(opts);
-    }
-
-    // Espera un ciclo para que el canvas interno esté listo
-    await new Promise(r => setTimeout(r, 20));
-
-    const innerCanvas = $('qr').querySelector('canvas');
-    if (!innerCanvas) {
-      $('status').textContent = 'No se pudo obtener el canvas interno del QR.';
-      return;
-    }
-
-    // Componer con título y mostrar en outCanvas
-    composeWithTitle(innerCanvas, title);
-    $('status').textContent = 'QR generado ✔ (con título incrustado)';
-    $('dl').disabled = false;
-  } catch (e) {
-    console.error(e);
-    $('status').textContent = 'Error al renderizar el QR. Revisa la ruta del logo o baja el %.';
+  if (!qr) {
+    qr = new QRCodeStyling(opts);
+    $('qr').innerHTML = "";
+    qr.append($('qr'));
+  } else {
+    qr.update(opts);
   }
+
+  $('dl').disabled = false;
+  $('status').textContent = '';
 };
 
 $('dl').onclick = async () => {
-  // Descarga el canvas compuesto (QR + título)
-  const out = $('outCanvas');
-  if (!out || !out.width) return;
-  const link = document.createElement('a');
-  link.download = 'qr_con_titulo.png';
-  link.href = out.toDataURL('image/png');
-  link.click();
+  if (!qr) return;
+  try {
+    await qr.download({ name: "qr_estilizado", extension: "png" });
+  } catch (e) {
+    $('status').textContent = 'No se pudo descargar el PNG. Revisa permisos del navegador.';
+    console.error(e);
+  }
 };
 
 // Valores por defecto al abrir (rutas robustas)
 window.addEventListener('load', () => {
   $('baseUrl').value = new URL('redirect.html', location.href).toString();
   $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  $('logoUrl').value = new URL('assets/1024-jmc.png', location.href).toString(); // tu logo PNG por defecto
+  $('logoUrl').value = new URL('assets/1024-jmc.png', location.href).toString(); // tu logo por defecto
 });
 </script>
 </body>
 </html>
-
 
 
 
