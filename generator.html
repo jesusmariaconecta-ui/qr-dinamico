@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>QR Studio — Estilizado (logo grande + esquinas redondeadas)</title>
 
-  <!-- Librería (versión estable que expone QRCodeStyling en window) -->
+  <!-- Librería estable que expone window.QRCodeStyling -->
   <script src="https://unpkg.com/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
 
   <style>
@@ -39,7 +39,7 @@
       <div class="row">
         <div>
           <label>Base URL del redirect (normalmente esta):</label>
-          <input id="baseUrl" placeholder="https://tuusuario.github.io/qr-dinamico/redirect.html" />
+          <input id="baseUrl" placeholder="https://TU_USUARIO.github.io/qr-dinamico/redirect.html" />
         </div>
         <div>
           <label>Destino (parámetro <code>k=</code>)</label>
@@ -117,7 +117,7 @@
         <div>
           <label>URL final codificada (solo lectura)</label>
           <input id="finalUrl" readonly />
-          <p class="small">Tip: añade <code>&show=1</code> al final para ver la página de redirección sin saltar.</p>
+          <p class="small">Tip: añade <code>&show=1</code> al final para ver la redirección sin saltar.</p>
           <p class="small" id="status"></p>
         </div>
       </div>
@@ -138,15 +138,17 @@ $('logoPct').addEventListener('input', () => $('logoPctVal').textContent = $('lo
 $('dotRound').addEventListener('input', () => $('dotRoundVal').textContent = Number($('dotRound').value).toFixed(2));
 
 $('gen').onclick = () => {
-  const base = $('baseUrl').value.trim() || (location.origin + location.pathname.replace(/generator_styled\.html$/,'') + 'redirect.html');
-  const key  = $('key').value;
-  const title= $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
-  const color= $('color').value || '#0b3a75';
-  const logo = $('logoUrl').value.trim();
-  const size = Math.max(256, parseInt($('size').value||'720',10));
-  const dotsR= Math.max(0, Math.min(1, parseFloat($('dotRound').value||'0.85')));
-  const ec   = $('ecLevel').value || 'H';
-  const corner = cornerType($('cornerStyle').value);
+  // Base robusta: usa el directorio actual, NO depende del nombre del archivo
+  const baseDefault = new URL('redirect.html', location.href).toString();
+  const base = ($('baseUrl').value.trim() || baseDefault);
+
+  const key   = $('key').value;
+  const title = $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
+  const color = $('color').value || '#0b3a75';
+  const logo  = $('logoUrl').value.trim();
+  const size  = Math.max(256, parseInt($('size').value||'720',10));
+  const ec    = $('ecLevel').value || 'H';
+  const corner= cornerType($('cornerStyle').value);
 
   const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
   $('finalUrl').value = target;
@@ -164,13 +166,9 @@ $('gen').onclick = () => {
       imageSize: (parseInt($('logoPct').value,10) / 100) // 0.10–0.40
     },
     qrOptions: { errorCorrectionLevel: ec },
-    dotsOptions: {
-      type: "rounded",
-      color: color
-      // (no usamos roundSize por compatibilidad; el slider es informativo)
-    },
-    cornersSquareOptions: { type: corner, color: color },
-    cornersDotOptions: { type: "dot", color: color },
+    dotsOptions: { type: "rounded", color: color }, // compatible en todas las builds
+    cornersSquareOptions: { type: corner, color },
+    cornersDotOptions: { type: "dot", color },
     backgroundOptions: { color: "#ffffff" }
   };
 
@@ -196,12 +194,11 @@ $('dl').onclick = async () => {
   }
 };
 
-// valores por defecto al abrir
+// Valores por defecto al abrir (rutas robustas)
 window.addEventListener('load', () => {
-  $('baseUrl').value = location.origin + location.pathname.replace(/generator_styled\.html$/,'') + 'redirect.html';
+  $('baseUrl').value = new URL('redirect.html', location.href).toString();
   $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  // Logo por defecto desde el mismo Pages (evita CORS)
-  $('logoUrl').value = location.origin + location.pathname.replace(/generator_styled\.html$/,'') + 'assets/1024-jmc.png';
+  $('logoUrl').value = new URL('assets/1024-jmc.png', location.href).toString(); // tu logo por defecto
 });
 </script>
 </body>
