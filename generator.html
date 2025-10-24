@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QR Studio — Dinámicos</title>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root{--brand:#0b3a75}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f7fb;color:#1f2937}
+    .container{max-width:980px;margin:32px auto;padding:0 16px}
+    .card{background:#fff;border-radius:16px;box-shadow:0 10px 24px rgba(0,0,0,.06);padding:20px}
+    h1{font-size:22px;margin:0 0 12px}
+    label{display:block;margin:10px 0 4px;color:#374151}
+    input,select{width:100%;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .actions{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+    button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:10px 14px;cursor:pointer}
+    canvas{background:#fff;border-radius:16px}
+    .preview{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}
+    .caption{color:var(--brand);text-align:center;margin-top:8px;font-weight:700}
+    .small{color:#6b7280;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>QR Studio — Dinámicos (GitHub Pages)</h1>
+      <p class="small">Este generador crea QRs que apuntan a <code>redirect.html</code>. Cambias el destino editando <code>target.json</code>.</p>
+
+      <div class="row">
+        <div>
+          <label>Base URL del redirect (normalmente esta página):</label>
+          <input id="baseUrl" placeholder="https://tuusuario.github.io/qr-dinamico/redirect.html" />
+        </div>
+        <div>
+          <label>Destino que controlará (parámetro k=)</label>
+          <select id="key">
+            <option value="android">Android (Play / temporal)</option>
+            <option value="ios">iOS (App Store)</option>
+            <option value="web">Web</option>
+            <option value="default">Default</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Título debajo del QR</label>
+          <input id="title" placeholder="Jesús María Conecta — App Store (iOS)" />
+        </div>
+        <div>
+          <label>Color del QR</label>
+          <input id="color" type="color" value="#0b3a75" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Logo (URL PNG/SVG opcional) — se coloca al centro</label>
+          <input id="logoUrl" placeholder="https://.../logo.png" />
+        </div>
+        <div>
+          <label>Tamaño QR (px)</label>
+          <input id="size" type="number" value="720" min="256" step="16" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="gen">Generar QR</button>
+        <button id="dl" disabled>Descargar PNG</button>
+      </div>
+
+      <div class="preview">
+        <div>
+          <canvas id="canvas"></canvas>
+          <div class="caption" id="caption">Previsualización</div>
+        </div>
+        <div>
+          <label>URL final codificada (solo lectura)</label>
+          <input id="finalUrl" readonly />
+          <p class="small">Tip: para revisar sin redirigir, añade <code>&show=1</code> al final.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+const $ = (id)=>document.getElementById(id);
+
+function drawCaption(ctx, text, w, h) {
+  ctx.fillStyle = '#0b3a75';
+  ctx.font = 'bold ' + Math.max(18, Math.floor(w*0.04)) + 'px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  const lines = [];
+  const maxChars = 36;
+  const words = text.split(' ');
+  let line = '';
+  for (const word of words) {
+    if ((line + ' ' + word).trim().length > maxChars) {
+      lines.push(line.trim()); line = word;
+    } else line = (line ? line + ' ' : '') + word;
+  }
+  if (line) lines.push(line);
+  let y = h - (lines.length-1)* (parseInt(ctx.font)*1.3) - 24;
+  for (const l of lines) {
+    ctx.fillText(l, w/2, y);
+    y += parseInt(ctx.font)*1.3;
+  }
+}
+
+function loadImage(url){ return new Promise((res,rej)=>{ const i=new Image(); i.crossOrigin='anonymous'; i.onload=()=>res(i); i.onerror=rej; i.src=url; }); }
+
+$('gen').onclick = async () => {
+  const base = $('baseUrl').value.trim() || (location.origin + location.pathname.replace(/generator\.html$/,'') + 'redirect.html');
+  const key  = $('key').value;
+  const title= $('title').value.trim() || (key==='ios' ? 'Jesús María Conecta — App Store (iOS)' : 'Jesús María Conecta — Android');
+  const color= $('color').value || '#0b3a75';
+  const logo = $('logoUrl').value.trim();
+  const size = Math.max(256, parseInt($('size').value||'720',10));
+  const target = base + (base.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
+
+  $('finalUrl').value = target;
+  $('caption').textContent = title;
+
+  // Qr en canvas secundario
+  const tmp = document.createElement('div');
+  const qr = new QRCode(tmp, { text: target, width: size, height: size, colorDark: color, colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+  // el lib dibuja un <img> o <canvas>; tomamos el <img> y lo pasamos a canvas
+  await new Promise(r => setTimeout(r, 10));
+  const img = tmp.querySelector('img') || tmp.querySelector('canvas');
+  const canvas = $('canvas');
+  const captionH = Math.floor(size * 0.30);
+  canvas.width = size;
+  canvas.height = size + captionH;
+  const ctx = canvas.getContext('2d');
+
+  // fondo blanco
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // dibujar QR
+  ctx.drawImage(img, 0, 0, size, size);
+
+  // logo centrado (opcional)
+  if (logo) {
+    try {
+      const logoImg = await loadImage(logo);
+      const box = Math.floor(size * 0.22);
+      const x = Math.floor((size - box)/2), y = Math.floor((size - box)/2);
+      // placa
+      ctx.fillStyle = '#ffffff';
+      const r = Math.floor(box*0.25);
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+box,y,x+box,y+box,r);
+      ctx.arcTo(x+box,y+box,x,y+box,r);
+      ctx.arcTo(x,y+box,x,y,r);
+      ctx.arcTo(x,y,x+box,y,r);
+      ctx.closePath(); ctx.fill();
+      // borde
+      ctx.lineWidth = Math.max(4, Math.floor(box*0.05));
+      ctx.strokeStyle = color; ctx.stroke();
+      // logo
+      ctx.drawImage(logoImg, x+Math.floor(box*0.12), y+Math.floor(box*0.12), Math.floor(box*0.76), Math.floor(box*0.76));
+    } catch(e){ console.warn('No se pudo cargar el logo:', e); }
+  }
+
+  // título
+  drawCaption(ctx, title, canvas.width, canvas.height);
+
+  $('dl').disabled = false;
+};
+
+$('dl').onclick = () => {
+  const link = document.createElement('a');
+  link.download = 'qr_' + ($('key').value) + '.png';
+  link.href = $('canvas').toDataURL('image/png');
+  link.click();
+};
+
+// valores por defecto cómodos
+window.addEventListener('load', () => {
+  $('baseUrl').value = location.origin + location.pathname.replace(/generator\.html$/,'') + 'redirect.html';
+  $('title').value   = 'Jesús María Conecta — App Store (iOS)';
+  $('logoUrl').value = location.origin + location.pathname.replace(/generator\.html$/,'') + 'assets/logo.png';
+});
+</script>
+</body>
+</html>
