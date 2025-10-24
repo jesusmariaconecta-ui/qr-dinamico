@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Redirección — QR dinámico</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <style>
+    :root{--brand:#0b3a75}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f7fb;color:#1f2937}
+    .wrap{max-width:720px;margin:8vh auto;padding:20px}
+    .card{background:#fff;border-radius:16px;box-shadow:0 12px 26px rgba(0,0,0,.08);padding:24px}
+    h1{margin:0 0 8px;font-size:22px}
+    p{margin:6px 0;color:#6b7280}
+    a.btn{display:inline-block;margin-top:12px;padding:10px 14px;border-radius:10px;background:var(--brand);color:#fff;text-decoration:none}
+    code{background:#eef2f7;border-radius:8px;padding:2px 6px}
+    .small{font-size:12px;color:#9ca3af}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 id="title">Redirigiendo…</h1>
+      <p>Si no ocurre automáticamente en 1 segundo, toca el botón:</p>
+      <p><a id="manual" class="btn" href="#" rel="noopener">Abrir destino</a></p>
+      <p class="small">URL actual: <code id="url">cargando…</code></p>
+    </div>
+  </div>
+
+<script>
+(async () => {
+  const params = new URLSearchParams(location.search);
+  const key = (params.get('k') || 'default').toLowerCase();
+  const bust = Date.now(); // evita caché
+  try {
+    const res = await fetch('target.json?ts=' + bust, {cache:'no-store'});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+
+    // prioridad según k
+    let to = (data.default || '').trim();
+    if (key === 'android' && data.android) to = data.android.trim();
+    if (key === 'ios' && data.ios)       to = data.ios.trim();
+    if (key === 'web' && data.web)       to = data.web.trim();
+
+    if (!to) throw new Error('URL destino vacía en target.json');
+
+    document.getElementById('url').textContent = to;
+    document.getElementById('manual').href = to;
+
+    // redirige (usa ?show=1 para solo mostrar y no redirigir)
+    if (!params.has('show')) {
+      setTimeout(() => { window.location.replace(to); }, 700);
+    }
+  } catch (e) {
+    document.getElementById('title').textContent = 'No se pudo redirigir';
+    document.getElementById('url').textContent = 'error: ' + (e.message || e);
+    document.getElementById('manual').style.display = 'none';
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
