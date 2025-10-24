@@ -193,9 +193,13 @@ $('dl').onclick = () => {
 
 // valores por defecto cómodos
 window.addEventListener('load', () => {
-  $('baseUrl').value = location.origin + location.pathname.replace(/generator\.html$/,'') + 'redirect.html';
-  $('title').value   = 'Jesús María Conecta — App Store (iOS)';
-  $('logoUrl').value = location.origin + location.pathname.replace(/generator\.html$/,'') + 'assets/logo.png';
+  const base = location.origin + location.pathname.replace(/generator\.html$/,'') + 'redirect.html';
+  document.getElementById('baseUrl').value = base;
+  document.getElementById('title').value   = 'Jesús María Conecta — App Store (iOS)';
+
+  // ← aquí fijamos por defecto TU logo
+  const defaultLogo = location.origin + location.pathname.replace(/generator\.html$/,'') + 'assets/1024-jmc.png';
+  document.getElementById('logoUrl').value = defaultLogo;
 });
 </script>
 </body>
